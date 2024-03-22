@@ -1,0 +1,508 @@
+#credit https://rudd-o.com/linux-and-free-software/how-to-get-sub-degree-accuracy-in-home-temperature-using-a-dumb-a-c-and-esphome
+
+
+substitutions:
+  # Tunables.  These values can be changed using number entities in HA.
+  initial_kp: "0.5"
+  initial_ki: "0.01"
+  initial_kd: "0.0"
+  initial_temperature_stiction: "0.1"
+  initial_fan_stiction: "0.1"
+  initial_medium_fan_threshold: "0.2"
+  initial_high_fan_threshold: "1.5"
+  initial_max_delta_from_setpoint: "5.0"
+  # Hard-coded.  These values can only be changed in the sketch.
+  min_integral: "-0.3"
+  max_integral: "0.05"
+  deadband_low: -0.1°C
+  deadband_high: 0.2°C
+  deadband_kp_multiplier: "1.0"
+  deadband_ki_multiplier: "0.05"
+  deadband_kd_multiplier: "0.0"
+  # Names of entities.
+  pid_climate_id: $name
+  pid_climate_name: $friendly_Name
+  target_climate_id: $climate_id
+  target_climate_name: $climate_name
+  target_climate_min_temp: "16.0"
+  target_climate_max_temp: "30.0"
+  source_temperature_sensor: $temperature
+  source_temperature_sampling_alpha: "0.1"
+#  skip_first_temperature_samples: "6"
+
+globals:
+- id: mode_changed
+  type: bool
+  restore_value: no
+  initial_value: "false"
+
+# Enable Home Assistant API
+#api:
+#  encryption:
+#    key: <put your own key here>
+#  services:
+#  - service: send_pronto
+#    variables:
+#      data: string
+#    then:
+#    - remote_transmitter.transmit_pronto:
+#        data: !lambda 'return data;'
+
+
+#button:
+#- platform: restart
+#  name: "$friendly_name Restart"
+#  entity_category: diagnostic
+#  icon: mdi:restart
+#- platform: safe_mode
+#  name: "$friendly_name Safe mode restart"
+#  entity_category: diagnostic
+#  icon: mdi:restart-alert
+#- platform: template
+#  name: "$friendly_name Reset PID integral value"
+#  entity_category: diagnostic
+#  on_press:
+#    - then:
+#      - climate.pid.reset_integral_term: ${pid_climate_id}
+#- platform: factory_reset
+#  name: "$friendly_name Factory reset"
+#  entity_category: diagnostic
+#  icon: mdi:restore-alert
+
+#binary_sensor:
+#- platform: status
+#  name: "$friendly_name API connected"
+#  id: api_connected
+#  entity_category: diagnostic
+
+- platform: template
+  name: "${pid_climate_name} in deadband"
+  id: ${pid_climate_id}_in_deadband
+  disabled_by_default: true
+  entity_category: "diagnostic"
+
+#climate:
+#- platform: novamatic_climate
+#  name: ${target_climate_name}
+#  id: ${target_climate_id}
+#  transmitter_id: transmitter
+#  icon: mdi:air-conditioner
+#  sensor: ${source_temperature_sensor}
+
+- platform: pid
+  name: "${pid_climate_name}"
+  id: "${pid_climate_id}"
+  sensor: sampled_temperature_for_${pid_climate_id}
+  default_target_temperature: 22°C
+  cool_output: ${pid_climate_id}_output
+  control_parameters:
+    kp: ${initial_kp}
+    ki: ${initial_ki}
+    kd: ${initial_kd}
+    min_integral: ${min_integral}
+    max_integral: ${max_integral}
+  deadband_parameters:
+    threshold_low: ${deadband_low}
+    threshold_high: ${deadband_high}
+    kp_multiplier: ${deadband_kp_multiplier}
+    ki_multiplier: ${deadband_ki_multiplier}
+    kd_multiplier: ${deadband_kd_multiplier}
+  on_control:
+    - globals.set:
+        id: mode_changed
+        value: "true"
+    - delay: 1s
+    - script.execute:
+        id: actuate_target_climate
+
+    # Obsolete comment below.
+    # FIXME the integral should not be reset every time the A/C is controlled.
+    # It should only be reset when the climate call against this PID unit
+    # contains a get_mode().value() of CLIMATE_MODE_COOL and perhaps
+    # when the current mode of the climate device is not CLIMATE_MODE_COOL.
+    # Requires: https://github.com/esphome/esphome/pull/5028
+    # - logger.log:
+    #     format: Resetting the integral term due to incoming change in state
+    #     tag: PID
+    #     level: info
+    # With the new setup, it does not appear to be necessary to
+    # reset the PID integral when settings are changed.
+    # - climate.pid.reset_integral_term: living_space
+
+number:
+- platform: template
+  name: "${pid_climate_name} PID Kp"
+  id: ${pid_climate_id}_pid_kp
+  min_value: 0
+  max_value: 50
+  step: 0.000001
+  initial_value: ${initial_kp}
+  optimistic: true
+  entity_category: config
+  restore_value: true
+  on_value:
+    then:
+      - climate.pid.set_control_parameters:
+          id: $pid_climate_id
+          kp: !lambda "return x;"
+          ki: !lambda "return id($pid_climate_id).get_ki();"
+          kd: !lambda "return id($pid_climate_id).get_kd();"
+  icon: mdi:chart-line-variant
+- platform: template
+  name: "${pid_climate_name} PID Ki"
+  id: ${pid_climate_id}_pid_ki
+  min_value: 0
+  max_value: 5
+  step: 0.000001
+  initial_value: ${initial_ki}
+  optimistic: true
+  entity_category: config
+  restore_value: true
+  on_value:
+    then:
+      - climate.pid.set_control_parameters:
+          id: $pid_climate_id
+          kp: !lambda "return id($pid_climate_id).get_kp();"
+          ki: !lambda "return x;"
+          kd: !lambda "return id($pid_climate_id).get_kd();"
+  icon: mdi:math-integral-box
+- platform: template
+  name: "${pid_climate_name} PID Kd"
+  id: ${pid_climate_id}_pid_kd
+  min_value: 0
+  max_value: 50
+  step: 0.000001
+  initial_value: ${initial_kd}
+  optimistic: true
+  entity_category: config
+  restore_value: true
+  on_value:
+    then:
+      - climate.pid.set_control_parameters:
+          id: $pid_climate_id
+          kp: !lambda "return id($pid_climate_id).get_kp();"
+          ki: !lambda "return id($pid_climate_id).get_ki();"
+          kd: !lambda "return x;"
+  icon: mdi:delta
+- platform: template
+  name: "${pid_climate_name} maximum delta from setpoint"
+  id: ${pid_climate_id}_maximum_delta_from_setpoint
+  min_value: 0
+  max_value: 10
+  step: 0.1
+  initial_value: ${initial_max_delta_from_setpoint}
+  optimistic: true
+  entity_category: config
+  restore_value: true
+  icon: mdi:delta
+- platform: template
+  name: "${target_climate_name} temperature stiction"
+  id: ${target_climate_id}_temperature_stiction
+  min_value: 0
+  max_value: 1
+  step: 0.01
+  initial_value: ${initial_temperature_stiction}
+  optimistic: true
+  entity_category: config
+  restore_value: true
+  icon: mdi:car-brake-temperature
+- platform: template
+  name: "${target_climate_name} fan stiction"
+  id: ${target_climate_id}_fan_stiction
+  min_value: 0
+  max_value: 1
+  step: 0.01
+  initial_value: ${initial_fan_stiction}
+  optimistic: true
+  entity_category: config
+  restore_value: true
+  icon: mdi:car-brake-temperature
+- platform: template
+  name: "${target_climate_name} high fan threshold"
+  id: ${target_climate_id}_high_fan_threshold
+  min_value: 0
+  max_value: 5
+  step: 0.01
+  initial_value: ${initial_high_fan_threshold}
+  optimistic: true
+  entity_category: config
+  restore_value: true
+  icon: mdi:fan-speed-3
+  unit_of_measurement: "°C"
+- platform: template
+  name: "${target_climate_name} medium fan threshold"
+  id: ${target_climate_id}_medium_fan_threshold
+  min_value: 0
+  max_value: 5
+  step: 0.01
+  initial_value: ${initial_medium_fan_threshold}
+  optimistic: true
+  entity_category: config
+  restore_value: true
+  icon: mdi:fan-speed-2
+  unit_of_measurement: "°C"
+
+# Dummy output needed by PID climate.
+# We compute our own PID output which is allowed
+# to be nonzero when the PID climate entity is off
+# since we must compute the target temperature
+# independently of the mode of the PID climate.
+output:
+- platform: template
+  id: ${pid_climate_id}_output
+  type: float
+  write_action:
+    - lambda: |-
+        ESP_LOGD("PID", "Written to output: %.2f", state);
+    - component.update: ${pid_climate_id}_pid_output
+    - binary_sensor.template.publish:
+        id: ${pid_climate_id}_in_deadband
+        state: !lambda 'return id(${pid_climate_id}).in_deadband();'
+
+sensor:
+- platform: homeassistant
+  entity_id: sensor.${source_temperature_sensor}
+  id: ${source_temperature_sensor}
+  device_class: temperature
+  state_class: measurement
+  unit_of_measurement: "°C"
+  internal: true
+
+- platform: template
+  id: sampled_temperature_for_${pid_climate_id}
+  lambda: |-
+    auto val = id(${source_temperature_sensor}).state;
+    if (!isnan(val)) {
+      return val;
+    } else {
+      return {};
+    }
+  update_interval: 5s
+  internal: true
+  filters:
+    # - skip_initial: ${skip_first_temperature_samples}
+    - exponential_moving_average:
+        alpha: ${source_temperature_sampling_alpha}
+        send_every: 1
+    # - throttle_average: 30s
+    # - heartbeat: 30s
+
+- platform: pid
+  name: "${pid_climate_name} PID P"
+  id: ${pid_climate_id}_pid_p
+  type: PROPORTIONAL
+  disabled_by_default: true
+  entity_category: "diagnostic"
+- platform: pid
+  name: "${pid_climate_name} PID I"
+  id: ${pid_climate_id}_pid_i
+  type: INTEGRAL
+  disabled_by_default: true
+  entity_category: "diagnostic"
+- platform: pid
+  name: "${pid_climate_name} PID D"
+  id: ${pid_climate_id}_pid_d
+  type: DERIVATIVE
+  disabled_by_default: true
+  entity_category: "diagnostic"
+- platform: pid
+  name: "${pid_climate_name} PID error"
+  id: ${pid_climate_id}_error
+  type: ERROR
+  disabled_by_default: true
+  entity_category: "diagnostic"
+- platform: template
+  name: "${pid_climate_name} PID output"
+  id: ${pid_climate_id}_pid_output
+  update_interval: never
+  disabled_by_default: true
+  unit_of_measurement: "%"
+  entity_category: "diagnostic"
+  lambda: |-
+    return id(${pid_climate_id}_pid_p).state + id(${pid_climate_id}_pid_i).state + id(${pid_climate_id}_pid_d).state;
+  on_value:
+    - component.update: temperature_for_${target_climate_id}
+
+- platform: template
+  name: Temperature for ${target_climate_name}
+  id: temperature_for_${target_climate_id}
+  update_interval: never
+  device_class: temperature
+  unit_of_measurement: "°C"
+  accuracy_decimals: 2
+  disabled_by_default: true
+  entity_category: "diagnostic"
+  lambda: |-
+    // The setpoint is the temperature you set in the PID climate.
+    float setpoint = id(${pid_climate_id}).target_temperature;
+    // The output is the PID output, ranging from zero to -anything,
+    // but in practice this will be clamped to +100% — -100% below.
+    float output = id(${pid_climate_id}_pid_output).state / 100.0;
+    // This is the maximum deviation of the temperature that will
+    // be set on the target climate unit.
+    float max_delta_from_setpoint = id(${pid_climate_id}_maximum_delta_from_setpoint).state;
+    // These are the target unit's maximum boundaries.
+    float hard_minimum = ${target_climate_min_temp};
+    float hard_maximum = ${target_climate_max_temp};
+    float max_from_setpoint = min(hard_maximum, setpoint + max_delta_from_setpoint);
+    float min_from_setpoint = max(hard_minimum, setpoint - max_delta_from_setpoint);
+    // The value is computed by adding the setpoint to the output
+    // multiplied by the maximum delta from setpoint.  E.g. if
+    // the PID output is -50% (-0.5), the setpoint is 22, and the max
+    // delta from setpoint is 4, then the value will be 22 + -0.5 * 4
+    // => in other words = 20.
+    float val = setpoint + output * max_delta_from_setpoint;
+    // And here we do the clamping, so even if the PID output is -200%
+    // we still only permit a minimum equivalent to
+    // setpoint - min_from_setpoint which takes into account the
+    // max deviation allowed as well as the hard minimum.  In practice,
+    // if the PID output is -150% (-1.5), the setpoint is 22, and the max
+    // delta from setpoint is 4, then the value will be 22 + -1.5 * 4
+    // => 16, but clamped to 18, in other words = 18.
+    float clamped = max(min(val, max_from_setpoint), min_from_setpoint);
+    return clamped;
+  on_value:
+    - script.execute:
+        id: actuate_target_climate
+
+- platform: wifi_signal
+  name: "Wi-Fi signal strength"
+  update_interval: 5s
+  entity_category: "diagnostic"
+
+script:
+- id: actuate_target_climate
+  then:
+  - lambda: |-
+      bool mc = id(mode_changed);
+      id(mode_changed) = false;
+
+      auto master_ac = id(${pid_climate_id});
+      auto slave_ac = id(${target_climate_id});
+      auto pid_mode = master_ac->mode;
+      auto slave_mode = slave_ac->mode;
+
+      if (pid_mode == esphome::climate::CLIMATE_MODE_OFF) {
+        if (slave_mode != esphome::climate::CLIMATE_MODE_OFF) {
+          esphome::climate::ClimateCall *c = new esphome::climate::ClimateCall(slave_ac);
+          c->set_mode(esphome::climate::CLIMATE_MODE_OFF);
+          ESP_LOGI("PID", "Turning off slave A/C because master A/C was turned off.");
+          c->perform();
+          delete c;
+        }
+        return;
+      }
+
+      /* From this point on, pid_mode is always CLIMATE_MODE_COOL. */
+
+      float new_slave_target_temperature = id(temperature_for_${target_climate_id}).state;
+      auto current_temperature = id(sampled_temperature_for_${pid_climate_id}).state;
+
+      if (new_slave_target_temperature >= current_temperature) {
+        if (slave_mode != esphome::climate::CLIMATE_MODE_OFF) {
+          esphome::climate::ClimateCall *c = new esphome::climate::ClimateCall(slave_ac);
+          c->set_mode(esphome::climate::CLIMATE_MODE_OFF);
+          ESP_LOGI("PID",
+                   "Turning off slave A/C because target temperature %.2f is above current temperature %.2f.",
+                   new_slave_target_temperature, current_temperature);
+          c->perform();
+          delete c;
+        }
+        return;
+      }
+
+      /* From this point on, new_slave_target_temperature is always < than current_temperature. */
+
+      auto slave_target_temperature = slave_ac->target_temperature;
+      esphome::climate::ClimateCall *c = new esphome::climate::ClimateCall(slave_ac);
+      bool perform_call = false;
+
+      // implement stiction on temperature control
+      // slave_target_temperature is always a rounded version of previously-set new_slave_target_temperature val
+      auto diff = abs(slave_target_temperature - new_slave_target_temperature);
+      auto stiction = id(${target_climate_id}_temperature_stiction).state;
+      if (diff >= 0.5 + stiction || (mc && slave_mode != esphome::climate::CLIMATE_MODE_COOL)) {
+        int wanttmp_int = floor(new_slave_target_temperature + 0.5);
+        if (mc && slave_mode != esphome::climate::CLIMATE_MODE_COOL) {
+          ESP_LOGI("PID",
+                   "Setting temp of ${target_climate_name} to %d (current temp %.2f) due to ${pid_climate_name} turning on.",
+                   wanttmp_int, current_temperature);
+        }
+        else {
+          ESP_LOGI("PID",
+                   "Temp of ${target_climate_name} is %.2f, diff is %.2f, changing it to %d (current temp %.2f).",
+                   slave_target_temperature, diff, wanttmp_int, current_temperature);
+        }
+        c->set_target_temperature(wanttmp_int);
+        if (wanttmp_int >= current_temperature) {
+          ESP_LOGI("PID", "The target temperature is higher than the current temperature, turning ${target_climate_id} off.");
+          c->set_mode(esphome::climate::CLIMATE_MODE_OFF);
+          perform_call = true;
+        } else {
+          ESP_LOGI("PID", "Turning ${target_climate_id} on.");
+          c->set_mode(esphome::climate::CLIMATE_MODE_COOL);
+          perform_call = true;
+        }
+      }
+
+      auto slave_fan_mode = esphome::climate::CLIMATE_FAN_AUTO;
+      auto high_medium_boundary = id(${target_climate_id}_high_fan_threshold).state;
+      auto medium_low_boundary = id(${target_climate_id}_medium_fan_threshold).state;
+      auto fan_stiction = id(${target_climate_id}_fan_stiction).state;
+      if (slave_ac->fan_mode.has_value()) {
+        slave_fan_mode = slave_ac->fan_mode.value();
+      }
+      float delta = master_ac->target_temperature - new_slave_target_temperature;
+      /*
+      truth table
+      stiction                 h/m                                         m/l
+      -> 0.1   >2.1   <=2.1   >2   <=2   >1.9   <=1.9   ↔   >1.1    <=1.1   >1   <=1   >0.9   <=0.9
+      if high     3       3    3     3      3       2   2      2      2    2     1      1       1
+      if med      3          2       2     2      2       2   2      2      2    2     2      2       1
+      if low      3       3    3     2      2       2   2      2      1    1     1      1       1
+      */
+      if (slave_fan_mode == esphome::climate::CLIMATE_FAN_HIGH) {
+        if (delta > high_medium_boundary - stiction) {
+          // do nothing
+        } else if (delta > medium_low_boundary) {
+          ESP_LOGI("PID", "Fan is %d, must be set to medium (delta %.2f).", slave_fan_mode, delta);
+          c->set_fan_mode(esphome::climate::CLIMATE_FAN_MEDIUM);
+          perform_call = true;
+        } else {
+          ESP_LOGI("PID", "Fan is %d, must be set to low (delta %.2f).", slave_fan_mode, delta);
+          c->set_fan_mode(esphome::climate::CLIMATE_FAN_LOW);
+          perform_call = true;
+        }
+      } else if (slave_fan_mode == esphome::climate::CLIMATE_FAN_MEDIUM) {
+        if (delta > high_medium_boundary + stiction) {
+          ESP_LOGI("PID", "Fan is %d, must be set to high (delta %.2f).", slave_fan_mode, delta);
+          c->set_fan_mode(esphome::climate::CLIMATE_FAN_HIGH);
+          perform_call = true;
+        } else if (delta <= high_medium_boundary + stiction
+                   &&
+                   delta >= medium_low_boundary - stiction) {
+          // do nothing
+        } else {
+          ESP_LOGI("PID", "Fan is %d, must be set to low (delta %.2f).", slave_fan_mode, delta);
+          c->set_fan_mode(esphome::climate::CLIMATE_FAN_LOW);
+          perform_call = true;
+        }
+      } else /* (slave_fan_mode == esphome::climate::CLIMATE_FAN_LOW) */ {
+        if (delta > high_medium_boundary) {
+          ESP_LOGI("PID", "Fan is %d, must be set to high (delta %.2f).", slave_fan_mode, delta);
+          c->set_fan_mode(esphome::climate::CLIMATE_FAN_HIGH);
+          perform_call = true;
+        } else if (delta > medium_low_boundary + stiction) {
+          ESP_LOGI("PID", "Fan is %d, must be set to medium (delta %.2f).", slave_fan_mode, delta);
+          c->set_fan_mode(esphome::climate::CLIMATE_FAN_MEDIUM);
+          perform_call = true;
+        } else {
+          // do nothing
+        }
+      }
+
+      if (perform_call) {
+        ESP_LOGI("PID", "Performing climate call to ${target_climate_id}.");
+        c->perform();
+      }
+      delete c;
