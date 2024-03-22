@@ -29,7 +29,7 @@ tuya:
 sensor:
 - platform: tuya
   name: $friendly_name Temperature
-  id: temperature_id
+  id: $temperature_id
   device_class: temperature
   unit_of_measurement: "°C"
   sensor_datapoint: 101
