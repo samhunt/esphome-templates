@@ -20,10 +20,8 @@ substitutions:
   deadband_ki_multiplier: "0.05"
   deadband_kd_multiplier: "0.0"
   # Names of entities.
-  pid_climate_id: $name
+  climate_id: $name
   pid_climate_name: $friendly_name
-  target_climate_id: $climate_id
-  target_climate_name: $climate_name
   target_climate_min_temp: "16.0"
   target_climate_max_temp: "30.0"
   source_temperature_sensor: $temperature_id
@@ -49,71 +47,57 @@ globals:
 #        data: !lambda 'return data;'
 
 
-#button:
-#- platform: restart
-#  name: "$friendly_name Restart"
-#  entity_category: diagnostic
-#  icon: mdi:restart
-#- platform: safe_mode
-#  name: "$friendly_name Safe mode restart"
-#  entity_category: diagnostic
-#  icon: mdi:restart-alert
-#- platform: template
-#  name: "$friendly_name Reset PID integral value"
-#  entity_category: diagnostic
-#  on_press:
-#    - then:
-#      - climate.pid.reset_integral_term: ${pid_climate_id}
-#- platform: factory_reset
-#  name: "$friendly_name Factory reset"
-#  entity_category: diagnostic
-#  icon: mdi:restore-alert
 
-#binary_sensor:
-#- platform: status
-#  name: "$friendly_name API connected"
-#  id: api_connected
-#  entity_category: diagnostic
+climate:
+  - platform: pid
+    name: "${pid_climate_name}"
+    id: $pid_climate_id
+    sensor: $sampled_temperature_for_id
+    default_target_temperature: 22°C
+    cool_output: ${pid_climate_id}_output
+    control_parameters:
+      kp: ${initial_kp}
+      ki: ${initial_ki}
+      kd: ${initial_kd}
+      min_integral: ${min_integral}
+      max_integral: ${max_integral}
+    deadband_parameters:
+      threshold_low: ${deadband_low}
+      threshold_high: ${deadband_high}
+      kp_multiplier: ${deadband_kp_multiplier}
+      ki_multiplier: ${deadband_ki_multiplier}
+      kd_multiplier: ${deadband_kd_multiplier}
+    on_control:
+      - globals.set:
+          id: mode_changed
+          value: "true"
+      - delay: 1s
+      - script.execute:
+          id: actuate_target_climate
 
+
+globals:
+- id: mode_changed
+  type: bool
+  restore_value: no
+  initial_value: "false"
+
+
+
+button:
+- platform: template
+  name: "$friendly_name Reset PID integral value"
+  entity_category: diagnostic
+  on_press:
+    - then:
+      - climate.pid.reset_integral_term: $pid_climate_id
+
+binary_sensor:
 - platform: template
   name: "${pid_climate_name} in deadband"
   id: ${pid_climate_id}_in_deadband
   disabled_by_default: true
   entity_category: "diagnostic"
-
-#climate:
-#- platform: novamatic_climate
-#  name: ${target_climate_name}
-#  id: ${target_climate_id}
-#  transmitter_id: transmitter
-#  icon: mdi:air-conditioner
-#  sensor: ${source_temperature_sensor}
-
-- platform: pid
-  name: "${pid_climate_name}"
-  id: "${pid_climate_id}"
-  sensor: sampled_temperature_for_${pid_climate_id}
-  default_target_temperature: 22°C
-  cool_output: ${pid_climate_id}_output
-  control_parameters:
-    kp: ${initial_kp}
-    ki: ${initial_ki}
-    kd: ${initial_kd}
-    min_integral: ${min_integral}
-    max_integral: ${max_integral}
-  deadband_parameters:
-    threshold_low: ${deadband_low}
-    threshold_high: ${deadband_high}
-    kp_multiplier: ${deadband_kp_multiplier}
-    ki_multiplier: ${deadband_ki_multiplier}
-    kd_multiplier: ${deadband_kd_multiplier}
-  on_control:
-    - globals.set:
-        id: mode_changed
-        value: "true"
-    - delay: 1s
-    - script.execute:
-        id: actuate_target_climate
 
     # Obsolete comment below.
     # FIXME the integral should not be reset every time the A/C is controlled.
@@ -269,7 +253,7 @@ sensor:
   internal: true
 
 - platform: template
-  id: sampled_temperature_for_${pid_climate_id}
+  id: $sampled_temperature_for_id
   lambda: |-
     auto val = id(${source_temperature_sensor}).state;
     if (!isnan(val)) {
@@ -321,11 +305,11 @@ sensor:
   lambda: |-
     return id(${pid_climate_id}_pid_p).state + id(${pid_climate_id}_pid_i).state + id(${pid_climate_id}_pid_d).state;
   on_value:
-    - component.update: temperature_for_${target_climate_id}
+    - component.update: $temperature_for_id
 
 - platform: template
   name: Temperature for ${target_climate_name}
-  id: temperature_for_${target_climate_id}
+  id: $temperature_for_id
   update_interval: never
   device_class: temperature
   unit_of_measurement: "°C"
@@ -395,8 +379,8 @@ script:
 
       /* From this point on, pid_mode is always CLIMATE_MODE_COOL. */
 
-      float new_slave_target_temperature = id(temperature_for_${target_climate_id}).state;
-      auto current_temperature = id(sampled_temperature_for_${pid_climate_id}).state;
+      float new_slave_target_temperature = id($temperature_for_id).state;
+      auto current_temperature = id($sampled_temperature_for_id).state;
 
       if (new_slave_target_temperature >= current_temperature) {
         if (slave_mode != esphome::climate::CLIMATE_MODE_OFF) {
