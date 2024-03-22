@@ -32,11 +32,6 @@ substitutions:
   sampled_temperature_for_id: sampled_temperature_for_${pid_climate_id}
 #  skip_first_temperature_samples: "6"
 
-globals:
-- id: mode_changed
-  type: bool
-  restore_value: no
-  initial_value: "false"
 
 # Enable Home Assistant API
 #api:
