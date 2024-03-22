@@ -10,7 +10,7 @@ substitutions:
   transmitter_pin: GPIO26
   temperature_id: temperature
   humidity_id: humidity
-  receivery_id: receiver
+  receiver_id: receiver
   transmitter_id: transmitter
   
 bk72xx:
@@ -47,7 +47,7 @@ status_led:
   pin: $status_pin
 
 remote_receiver:
-  id: receiver
+  id: $receiver_id
   pin:
     number: $receiver_pin
     mode: INPUT
@@ -55,6 +55,6 @@ remote_receiver:
   dump: pronto
 
 remote_transmitter:
-  id: transmitter
+  id: $transmitter_id
   pin: $transmitter_pin
   carrier_duty_percent: 50%
