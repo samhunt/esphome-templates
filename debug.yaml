@@ -1,0 +1,46 @@
+substitutes:
+  friendly_name: friendly_name
+
+debug:
+  update_interval: 30s
+
+logger:
+  level: VERBOSE
+  logs:
+    tuya: DEBUG
+    json: DEBUG
+    api: DEBUG
+    component: DEBUG
+    sensor: DEBUG
+
+
+time:
+  - platform: homeassistant
+    id: time_ha
+    on_time_sync:
+      if:
+        condition:
+          lambda: return isnan(id(last_restart).state);
+        then:
+          sensor.template.publish:
+            id: last_restart
+            state: !lambda return id(time_ha).now().timestamp;
+
+
+text_sensor: 
+  - platform: wifi_info
+    ip_address:
+      id: ip_address
+      name: "$friendly_name IP Address"
+
+
+sensor:
+- platform: uptime
+  name: Uptime
+- platform: template
+  name: "$friendly_name Last Restart"
+  entity_category: diagnostic
+  id: last_restart
+  icon: mdi:clock-start
+  device_class: timestamp
+  update_interval: never
