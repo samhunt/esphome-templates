@@ -1,5 +1,5 @@
 substitutes:
-  friendly_name: friendly_name
+  friendly_name: "friendly_name"
 
 debug:
   update_interval: 30s
