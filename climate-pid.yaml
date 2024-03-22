@@ -245,7 +245,7 @@ output:
 sensor:
 - platform: homeassistant
   entity_id: sensor.${source_temperature_sensor}
-  id: ${source_temperature_sensor}
+  id: ${source_temperature_sensor}_1
   device_class: temperature
   state_class: measurement
   unit_of_measurement: "°C"
