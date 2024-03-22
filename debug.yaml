@@ -1,4 +1,4 @@
-substitutes:
+substitutions:
   friendly_name: "friendly_name"
 
 debug:
