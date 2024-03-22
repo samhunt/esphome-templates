@@ -1,0 +1,55 @@
+# S08 PRO IR Receiver/Transmitter https://www.aliexpress.com/i/1005002505900746.html
+
+substitutions:
+  name: smart_ir
+  friendly_name: "Smart IR"
+  status_pin: GPIO9
+  tx_pin: GPIO11
+  rx_pin: GPIO10
+  receiver_pin: GPIO8
+  transmitter_pin: GPIO26
+  temperature_id: temperature
+  humidity_id: humidity
+  receivery_id: receiver
+  transmitter_id: transmitter
+  
+uart:
+  tx_pin: $tx_pin
+  rx_pin: $rx_pin
+  baud_rate: 9600
+
+tuya:
+  status_pin: $status_pin
+
+sensor:
+- platform: tuya
+  name: $friendly_name Temperature
+  id: temperature_id
+  device_class: temperature
+  unit_of_measurement: "°C"
+  sensor_datapoint: 101
+  accuracy_decimals: 1
+  filters:
+    multiply: 0.1
+- platform: tuya
+  name: $friendly_name Humidity
+  id: humidity
+  device_class: humidity
+  unit_of_measurement: "%"
+  sensor_datapoint: 102
+
+status_led:
+  pin: $status_pin
+
+remote_receiver:
+  id: receiver
+  pin:
+    number: $receiver_pin
+    mode: INPUT
+    inverted: True
+  dump: pronto
+
+remote_transmitter:
+  id: transmitter
+  pin: $transmitter_pin
+  carrier_duty_percent: 50%
