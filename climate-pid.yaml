@@ -21,9 +21,9 @@ substitutions:
   deadband_kd_multiplier: "0.0"
   # Names of entities.
   pid_climate_id: pid_climate_id
-  pid_climate_name: "${friendly_name} PID Climate"
+  pid_climate_name: "${friendly_name} PID ${climate_name}"
   target_climate_id: ${climate_id}
-  target_climate_name: "${climate_name}"
+  target_climate_name: "${friendly_name}"
   target_climate_min_temp: "16.0"
   target_climate_max_temp: "30.0"
   source_temperature_sensor: $temperature_id
