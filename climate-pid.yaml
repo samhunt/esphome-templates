@@ -347,12 +347,7 @@ output:
   on_value:
     - script.execute:
         id: actuate_target_climate
-
-- platform: wifi_signal
-  name: "Wi-Fi signal strength"
-  update_interval: 5s
-  entity_category: "diagnostic"
-
+        
 script:
 - id: actuate_target_climate
   then:
