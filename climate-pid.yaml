@@ -74,15 +74,6 @@ climate:
       - script.execute:
           id: actuate_target_climate
 
-
-globals:
-- id: mode_changed
-  type: bool
-  restore_value: no
-  initial_value: "false"
-
-
-
 button:
 - platform: template
   name: "$friendly_name Reset PID integral value"
