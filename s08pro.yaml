@@ -13,9 +13,7 @@ substitutions:
   humidity_id: humidity_id
   humidity_name: $friendly_name Humidity
   receiver_id: receiver_id
-  receiver_name: $friendly_name Receiver
   transmitter_id: transmitter_id
-  transmitter_name: $friendly_name Transmitter
   
 bk72xx:
   board: generic-bk7231t-qfn32-tuya
@@ -52,17 +50,13 @@ status_led:
 
 remote_receiver:
   id: $receiver_id
-  name: $receiver_name
   pin:
     number: $receiver_pin
     mode: INPUT
     inverted: True
   dump: pronto
-  internal: true
 
 remote_transmitter:
   id: $transmitter_id
-  name: $transmitter_name
   pin: $transmitter_pin
   carrier_duty_percent: 50%
-  internal: true
