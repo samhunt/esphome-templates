@@ -9,9 +9,13 @@ substitutions:
   receiver_pin: GPIO8
   transmitter_pin: GPIO26
   temperature_id: temperature
+  temperature_name: $friendly_name Temperature
   humidity_id: humidity
+  humidity_name: $friendly_name Humidity
   receiver_id: receiver
+  receiver_name: receiver
   transmitter_id: transmitter
+  transmitter_name: transmitter
   
 bk72xx:
   board: generic-bk7231t-qfn32-tuya
@@ -28,7 +32,7 @@ tuya:
 
 sensor:
 - platform: tuya
-  name: $friendly_name Temperature
+  name: $temperature_name
   id: $temperature_id
   device_class: temperature
   unit_of_measurement: "°C"
@@ -37,8 +41,8 @@ sensor:
   filters:
     multiply: 0.1
 - platform: tuya
-  name: $friendly_name Humidity
-  id: humidity
+  name: $humidity_name
+  id: $humidity_id
   device_class: humidity
   unit_of_measurement: "%"
   sensor_datapoint: 102
@@ -48,13 +52,17 @@ status_led:
 
 remote_receiver:
   id: $receiver_id
+  name: $receiver_name
   pin:
     number: $receiver_pin
     mode: INPUT
     inverted: True
   dump: pronto
+  internal: true
 
 remote_transmitter:
   id: $transmitter_id
+  name: $transmitter_name
   pin: $transmitter_pin
   carrier_duty_percent: 50%
+  internal: true
