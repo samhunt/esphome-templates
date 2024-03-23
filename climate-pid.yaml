@@ -242,14 +242,14 @@ output:
         id: ${pid_climate_id}_in_deadband
         state: !lambda 'return id(${pid_climate_id}).in_deadband();'
 
-#sensor:
-#- platform: homeassistant
-#  entity_id: sensor.${source_temperature_sensor}
-#  id: ${source_temperature_sensor}_1
-#  device_class: temperature
-#  state_class: measurement
-#  unit_of_measurement: "°C"
-#  internal: true
+sensor:
+- platform: homeassistant
+  entity_id: sensor.${source_temperature_sensor}
+  id: ${source_temperature_sensor}_1
+  device_class: temperature
+  state_class: measurement
+  unit_of_measurement: "°C"
+  internal: true
 
 - platform: template
   id: $sampled_temperature_for_id
