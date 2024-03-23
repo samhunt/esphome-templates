@@ -8,13 +8,13 @@ substitutions:
   rx_pin: GPIO10
   receiver_pin: GPIO8
   transmitter_pin: GPIO26
-  temperature_id: temperature
+  temperature_id: temperature_id
   temperature_name: $friendly_name Temperature
-  humidity_id: humidity
+  humidity_id: humidity_id
   humidity_name: $friendly_name Humidity
-  receiver_id: receiver
+  receiver_id: receiver_id
   receiver_name: $friendly_name Receiver
-  transmitter_id: transmitter
+  transmitter_id: transmitter_id
   transmitter_name: $friendly_name Transmitter
   
 bk72xx:
