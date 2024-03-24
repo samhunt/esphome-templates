@@ -48,31 +48,33 @@ substitutions:
 
 
 climate:
-  - platform: pid
-    name: "${pid_climate_name}"
-    id: $pid_climate_id
-    sensor: $sampled_temperature_for_id
-    default_target_temperature: 22°C
-    cool_output: ${pid_climate_id}_output
-    control_parameters:
-      kp: ${initial_kp}
-      ki: ${initial_ki}
-      kd: ${initial_kd}
-      min_integral: ${min_integral}
-      max_integral: ${max_integral}
-    deadband_parameters:
-      threshold_low: ${deadband_low}
-      threshold_high: ${deadband_high}
-      kp_multiplier: ${deadband_kp_multiplier}
-      ki_multiplier: ${deadband_ki_multiplier}
-      kd_multiplier: ${deadband_kd_multiplier}
-    on_control:
-      - globals.set:
-          id: mode_changed
-          value: "true"
-      - delay: 1s
-      - script.execute:
-          id: actuate_target_climate
+   - platform: pid
+     name: "${pid_climate_name}"
+     id: $pid_climate_id
+     sensor: $sampled_temperature_for_id
+     default_target_temperature: 22°C
+     cool_output: ${pid_climate_id}_output
+     heat_output: ${pid_climate_id}_output
+     control_parameters:
+       kp: ${initial_kp}
+       ki: ${initial_ki}
+       kd: ${initial_kd}
+       min_integral: ${min_integral}
+       max_integral: ${max_integral}
+     deadband_parameters:
+       threshold_low: ${deadband_low}
+       threshold_high: ${deadband_high}
+       kp_multiplier: ${deadband_kp_multiplier}
+       ki_multiplier: ${deadband_ki_multiplier}
+       kd_multiplier: ${deadband_kd_multiplier}
+     on_control:
+       - globals.set:
+           id: mode_changed
+           value: "true"
+       - delay: 1s
+       - script.execute:
+           id: actuate_target_climate
+
 
 
 globals:
@@ -351,10 +353,10 @@ script:
       auto slave_ac = id(${target_climate_id});
       auto pid_mode = master_ac->mode;
       auto slave_mode = slave_ac->mode;
+          esphome::climate::ClimateCall *c = new esphome::climate::ClimateCall(slave_ac);
 
       if (pid_mode == esphome::climate::CLIMATE_MODE_OFF) {
         if (slave_mode != esphome::climate::CLIMATE_MODE_OFF) {
-          esphome::climate::ClimateCall *c = new esphome::climate::ClimateCall(slave_ac);
           c->set_mode(esphome::climate::CLIMATE_MODE_OFF);
           ESP_LOGI("PID", "Turning off slave A/C because master A/C was turned off.");
           c->perform();
@@ -363,17 +365,17 @@ script:
         return;
       }
 
-      /* From this point on, pid_mode is always CLIMATE_MODE_COOL. */
+      /* From this point on, pid_mode is CLIMATE_MODE_COOL/CLIMATE_MODE_HEAT_COOL/CLIMATE_MODE_HEAT . */
 
       float new_slave_target_temperature = id($temperature_for_id).state;
       auto current_temperature = id($sampled_temperature_for_id).state;
 
-      if (new_slave_target_temperature >= current_temperature) {
+      if ((new_slave_target_temperature >= current_temperature && pid_mode == esphome::climate::CLIMATE_MODE_COOL)
+          || (new_slave_target_temperature <= current_temperature && pid_mode == esphome::climate::CLIMATE_MODE_HEAT)) {
         if (slave_mode != esphome::climate::CLIMATE_MODE_OFF) {
-          esphome::climate::ClimateCall *c = new esphome::climate::ClimateCall(slave_ac);
           c->set_mode(esphome::climate::CLIMATE_MODE_OFF);
           ESP_LOGI("PID",
-                   "Turning off slave A/C because target temperature %.2f is above current temperature %.2f.",
+                   "Turning off slave A/C because target temperature %.2f is above current temperature %.2f (for the PID state).",
                    new_slave_target_temperature, current_temperature);
           c->perform();
           delete c;
@@ -381,38 +383,69 @@ script:
         return;
       }
 
-      /* From this point on, new_slave_target_temperature is always < than current_temperature. */
-
       auto slave_target_temperature = slave_ac->target_temperature;
-      esphome::climate::ClimateCall *c = new esphome::climate::ClimateCall(slave_ac);
       bool perform_call = false;
-
-      // implement stiction on temperature control
-      // slave_target_temperature is always a rounded version of previously-set new_slave_target_temperature val
+      bool pid_cool = (pid_mode == esphome::climate::CLIMATE_MODE_COOL || pid_mode == esphome::climate::CLIMATE_MODE_HEAT_COOL); 
+      bool pid_heat = (pid_mode == esphome::climate::CLIMATE_MODE_HEAT || pid_mode == esphome::climate::CLIMATE_MODE_HEAT_COOL);
+      
       auto diff = abs(slave_target_temperature - new_slave_target_temperature);
       auto stiction = id(${target_climate_id}_temperature_stiction).state;
-      if (diff >= 0.5 + stiction || (mc && slave_mode != esphome::climate::CLIMATE_MODE_COOL)) {
-        int wanttmp_int = floor(new_slave_target_temperature + 0.5);
-        if (mc && slave_mode != esphome::climate::CLIMATE_MODE_COOL) {
-          ESP_LOGI("PID",
-                   "Setting temp of ${target_climate_name} to %d (current temp %.2f) due to ${pid_climate_name} turning on.",
-                   wanttmp_int, current_temperature);
-        }
-        else {
-          ESP_LOGI("PID",
-                   "Temp of ${target_climate_name} is %.2f, diff is %.2f, changing it to %d (current temp %.2f).",
-                   slave_target_temperature, diff, wanttmp_int, current_temperature);
-        }
-        c->set_target_temperature(wanttmp_int);
-        if (wanttmp_int >= current_temperature) {
-          ESP_LOGI("PID", "The target temperature is higher than the current temperature, turning ${target_climate_id} off.");
-          c->set_mode(esphome::climate::CLIMATE_MODE_OFF);
-          perform_call = true;
-        } else {
-          ESP_LOGI("PID", "Turning ${target_climate_id} on.");
-          c->set_mode(esphome::climate::CLIMATE_MODE_COOL);
-          perform_call = true;
-        }
+      if(pid_cool && new_slave_target_temperature < current_temperature){
+      
+          // implement stiction on temperature control
+          // slave_target_temperature is always a rounded version of previously-set new_slave_target_temperature val
+          if (diff >= 0.5 + stiction || (mc && slave_mode != esphome::climate::CLIMATE_MODE_COOL)) {
+              int wanttmp_int = floor(new_slave_target_temperature + 0.5);
+              if (mc && slave_mode != esphome::climate::CLIMATE_MODE_COOL) {
+              ESP_LOGI("PID",
+                      "Setting temp of ${target_climate_name} to %d (current temp %.2f) due to ${pid_climate_name} turning on.",
+                      wanttmp_int, current_temperature);
+              }
+              else {
+              ESP_LOGI("PID",
+                      "Temp of ${target_climate_name} is %.2f, diff is %.2f, changing it to %d (current temp %.2f).",
+                      slave_target_temperature, diff, wanttmp_int, current_temperature);
+              }
+              c->set_target_temperature(wanttmp_int);
+              if (wanttmp_int >= current_temperature) {
+              ESP_LOGI("PID", "The target temperature is higher than the current temperature, turning ${target_climate_id} off.");
+              c->set_mode(esphome::climate::CLIMATE_MODE_OFF);
+              perform_call = true;
+              } else {
+              ESP_LOGI("PID", "Turning ${target_climate_id} on.");
+              c->set_mode(esphome::climate::CLIMATE_MODE_COOL);
+              perform_call = true;
+              }
+          }
+      }
+      if(pid_heat && new_slave_target_temperature > current_temperature){
+          
+          // implement stiction on temperature control
+          // slave_target_temperature is always a rounded version of previously-set new_slave_target_temperature val
+          
+          if (diff >= 0.5 + stiction || (mc && slave_mode != esphome::climate::CLIMATE_MODE_HEAT)) {
+              int wanttmp_int = floor(new_slave_target_temperature + 0.5);
+              if (mc && slave_mode != esphome::climate::CLIMATE_MODE_HEAT) {
+              ESP_LOGI("PID",
+                      "Setting temp of ${target_climate_name} to %d (current temp %.2f) due to ${pid_climate_name} turning on.",
+                      wanttmp_int, current_temperature);
+              }
+              else {
+              ESP_LOGI("PID",
+                      "Temp of ${target_climate_name} is %.2f, diff is %.2f, changing it to %d (current temp %.2f).",
+                      slave_target_temperature, diff, wanttmp_int, current_temperature);
+              }
+              c->set_target_temperature(wanttmp_int);
+              if (wanttmp_int <= current_temperature) {
+              ESP_LOGI("PID", "The target temperature is lower than the current temperature, turning ${target_climate_id} off.");
+              c->set_mode(esphome::climate::CLIMATE_MODE_OFF);
+              perform_call = true;
+              } else {
+              ESP_LOGI("PID", "Turning ${target_climate_id} on.");
+              c->set_mode(esphome::climate::CLIMATE_MODE_HEAT);
+              perform_call = true;
+              }
+          }
       }
 
       auto slave_fan_mode = esphome::climate::CLIMATE_FAN_AUTO;
@@ -420,7 +453,7 @@ script:
       auto medium_low_boundary = id(${target_climate_id}_medium_fan_threshold).state;
       auto fan_stiction = id(${target_climate_id}_fan_stiction).state;
       if (slave_ac->fan_mode.has_value()) {
-        slave_fan_mode = slave_ac->fan_mode.value();
+          slave_fan_mode = slave_ac->fan_mode.value();
       }
       float delta = master_ac->target_temperature - new_slave_target_temperature;
       /*
@@ -432,47 +465,47 @@ script:
       if low      3       3    3     2      2       2   2      2      1    1     1      1       1
       */
       if (slave_fan_mode == esphome::climate::CLIMATE_FAN_HIGH) {
-        if (delta > high_medium_boundary - stiction) {
+          if (delta > high_medium_boundary - stiction) {
           // do nothing
-        } else if (delta > medium_low_boundary) {
+          } else if (delta > medium_low_boundary) {
           ESP_LOGI("PID", "Fan is %d, must be set to medium (delta %.2f).", slave_fan_mode, delta);
           c->set_fan_mode(esphome::climate::CLIMATE_FAN_MEDIUM);
           perform_call = true;
-        } else {
+          } else {
           ESP_LOGI("PID", "Fan is %d, must be set to low (delta %.2f).", slave_fan_mode, delta);
           c->set_fan_mode(esphome::climate::CLIMATE_FAN_LOW);
           perform_call = true;
-        }
+          }
       } else if (slave_fan_mode == esphome::climate::CLIMATE_FAN_MEDIUM) {
-        if (delta > high_medium_boundary + stiction) {
+          if (delta > high_medium_boundary + stiction) {
           ESP_LOGI("PID", "Fan is %d, must be set to high (delta %.2f).", slave_fan_mode, delta);
           c->set_fan_mode(esphome::climate::CLIMATE_FAN_HIGH);
           perform_call = true;
-        } else if (delta <= high_medium_boundary + stiction
-                   &&
-                   delta >= medium_low_boundary - stiction) {
+          } else if (delta <= high_medium_boundary + stiction
+                  &&
+                  delta >= medium_low_boundary - stiction) {
           // do nothing
-        } else {
+          } else {
           ESP_LOGI("PID", "Fan is %d, must be set to low (delta %.2f).", slave_fan_mode, delta);
           c->set_fan_mode(esphome::climate::CLIMATE_FAN_LOW);
           perform_call = true;
-        }
+          }
       } else /* (slave_fan_mode == esphome::climate::CLIMATE_FAN_LOW) */ {
-        if (delta > high_medium_boundary) {
+          if (delta > high_medium_boundary) {
           ESP_LOGI("PID", "Fan is %d, must be set to high (delta %.2f).", slave_fan_mode, delta);
           c->set_fan_mode(esphome::climate::CLIMATE_FAN_HIGH);
           perform_call = true;
-        } else if (delta > medium_low_boundary + stiction) {
+          } else if (delta > medium_low_boundary + stiction) {
           ESP_LOGI("PID", "Fan is %d, must be set to medium (delta %.2f).", slave_fan_mode, delta);
           c->set_fan_mode(esphome::climate::CLIMATE_FAN_MEDIUM);
           perform_call = true;
-        } else {
+          } else {
           // do nothing
-        }
+          }
       }
-
+      
       if (perform_call) {
-        ESP_LOGI("PID", "Performing climate call to ${target_climate_id}.");
-        c->perform();
+          ESP_LOGI("PID", "Performing climate call to ${target_climate_id}.");
+          c->perform();
       }
       delete c;
