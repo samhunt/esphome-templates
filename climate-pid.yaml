@@ -379,7 +379,7 @@ script:
 
       if ((new_slave_target_temperature >= current_temperature && pid_mode == esphome::climate::CLIMATE_MODE_COOL)
           || (new_slave_target_temperature <= current_temperature && pid_mode == esphome::climate::CLIMATE_MODE_HEAT)
-          || (diff <= 0.2 && pid_mode == esphome::climate::CLIMATE_MODE_HEAT_COOL)) {
+          || (abs(new_slave_target_temperature - current_temperature) <= 0.2 && pid_mode == esphome::climate::CLIMATE_MODE_HEAT_COOL)) {
         if (slave_mode != esphome::climate::CLIMATE_MODE_OFF) {
           c->set_mode(esphome::climate::CLIMATE_MODE_OFF);
           ESP_LOGI("PID",
