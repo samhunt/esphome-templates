@@ -369,9 +369,17 @@ script:
 
       float new_slave_target_temperature = id($temperature_for_id).state;
       auto current_temperature = id($sampled_temperature_for_id).state;
+      auto slave_target_temperature = slave_ac->target_temperature;
+      bool perform_call = false;
+      bool pid_cool = (pid_mode == esphome::climate::CLIMATE_MODE_COOL || pid_mode == esphome::climate::CLIMATE_MODE_HEAT_COOL); 
+      bool pid_heat = (pid_mode == esphome::climate::CLIMATE_MODE_HEAT || pid_mode == esphome::climate::CLIMATE_MODE_HEAT_COOL);
+      
+      auto diff = abs(slave_target_temperature - new_slave_target_temperature);
+      auto stiction = id(${target_climate_id}_temperature_stiction).state;
 
       if ((new_slave_target_temperature >= current_temperature && pid_mode == esphome::climate::CLIMATE_MODE_COOL)
-          || (new_slave_target_temperature <= current_temperature && pid_mode == esphome::climate::CLIMATE_MODE_HEAT)) {
+          || (new_slave_target_temperature <= current_temperature && pid_mode == esphome::climate::CLIMATE_MODE_HEAT)
+          || (diff <= 0.2 && pid_mode == esphome::climate::CLIMATE_MODE_HEAT_COOL)) {
         if (slave_mode != esphome::climate::CLIMATE_MODE_OFF) {
           c->set_mode(esphome::climate::CLIMATE_MODE_OFF);
           ESP_LOGI("PID",
@@ -383,13 +391,6 @@ script:
         return;
       }
 
-      auto slave_target_temperature = slave_ac->target_temperature;
-      bool perform_call = false;
-      bool pid_cool = (pid_mode == esphome::climate::CLIMATE_MODE_COOL || pid_mode == esphome::climate::CLIMATE_MODE_HEAT_COOL); 
-      bool pid_heat = (pid_mode == esphome::climate::CLIMATE_MODE_HEAT || pid_mode == esphome::climate::CLIMATE_MODE_HEAT_COOL);
-      
-      auto diff = abs(slave_target_temperature - new_slave_target_temperature);
-      auto stiction = id(${target_climate_id}_temperature_stiction).state;
       if(pid_cool && new_slave_target_temperature < current_temperature){
       
           // implement stiction on temperature control
